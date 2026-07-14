@@ -31,15 +31,28 @@ const S = {
   page: (lt) => ({ position: 'fixed', inset: 0, background: lt ? '#f0f4f8' : '#0f172a', zIndex: 30, maxWidth: 420, margin: '0 auto', overflowY: 'auto', paddingBottom: 30 }),
 };
 
-function Av({ name, size = 38, impaye }) {
+function Av({ name, size = 38, impaye, photoUrl }) {
   const i = (name || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
   const colors = ['#3b82f6','#6366f1','#0ea5e9','#06b6d4','#8b5cf6'];
   const bg = colors[(name || '').length % colors.length];
+  const [zoomed, setZoomed] = useState(false);
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <div style={{ width: size, height: size, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: size * 0.35 }}>{i}</div>
-      {impaye && <div style={{ position: 'absolute', bottom: -1, right: -1, background: '#ef4444', borderRadius: '50%', width: 13, height: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f172a', color: '#fff', fontSize: 8, fontWeight: 'bold' }}>!</div>}
-    </div>
+    <>
+      <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: photoUrl ? 'pointer' : 'default' }} onClick={() => photoUrl && setZoomed(true)}>
+        {photoUrl ? (
+          <img src={photoUrl} alt={name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: size, height: size, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: size * 0.35 }}>{i}</div>
+        )}
+        {impaye && <div style={{ position: 'absolute', bottom: -1, right: -1, background: '#ef4444', borderRadius: '50%', width: 13, height: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f172a', color: '#fff', fontSize: 8, fontWeight: 'bold' }}>!</div>}
+      </div>
+      {zoomed && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }} onClick={() => setZoomed(false)}>
+          <img src={photoUrl} alt={name} style={{ maxWidth: '92%', maxHeight: '92%', borderRadius: 12, objectFit: 'contain' }} />
+          <p style={{ position: 'absolute', bottom: 30, color: '#fff', fontSize: 13, opacity: 0.7 }}>Appuyer pour fermer</p>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -682,7 +695,7 @@ export default function App() {
 
   async function handleLogin() {
     setLoading(true); setLoginError('');
-    if (username === 'admin' && password === 'admin123') {
+    if (username === 'Admin' && password === 'adminjoino') {
       setRole('admin'); setView('admin');
     } else {
       const partner = await api.loginPartner(username);
@@ -735,7 +748,7 @@ export default function App() {
 
       <div style={S.header(lt)}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Av name={me?.full_name || ''} size={38} />
+          <Av name={me?.full_name || ''} size={38} photoUrl={me?.photo_url} />
           <div>
             <p style={{ margin: 0, fontWeight: 'bold', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 15 }}>Bienvenue {me?.full_name?.split(' ')[0]}</p>
             <p style={{ margin: 0, color: '#3b82f6', fontSize: 11, fontFamily: 'monospace' }}>{me?.code}</p>
@@ -834,7 +847,7 @@ export default function App() {
         </div>
       )}
 
-      {partnerTab === 'messages' && <MsgView partnerId={me?.id} partnerName="Service GPS" lt={lt} isAdmin={false} onBack={() => setPartnerTab('home')} />}
+      {partnerTab === 'messages' && me?.id && <MsgView partnerId={me.id} partnerName="Service GPS" lt={lt} isAdmin={false} onBack={() => setPartnerTab('home')} />}
 
       <div style={S.nav(lt)}>
         {[['home','🏠','Accueil'],['clients','👥','Clients'],['wallet','💰','Portefeuille'],['messages','💬','Messages']].map(([tab, icon, label]) => (
@@ -846,17 +859,68 @@ export default function App() {
 
       {showWithdraw && (
         <Sheet title="Demande de retrait" lt={lt} onClose={() => setShowWithdraw(false)}>
-          <label style={S.label(lt)}>Montant (F)</label>
-          <input style={S.input(lt)} type="number" value={wdForm.amount} onChange={e => setWdForm(x => ({ ...x, amount: Number(e.target.value) }))} />
-          <label style={S.label(lt)}>Méthode</label>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            {['MTN','Moov'].map(m => (
-              <button key={m} style={{ flex: 1, padding: 12, borderRadius: 8, border: 'none', cursor: 'pointer', background: wdForm.method === m ? '#f59e0b20' : lt ? '#e8edf2' : '#0f172a', color: wdForm.method === m ? '#f59e0b' : '#94a3b8', fontWeight: 'bold' }} onClick={() => setWdForm(x => ({ ...x, method: m }))}>{m} Money</button>
-            ))}
-          </div>
-          <button style={S.btnFull()} onClick={async () => { await api.addWithdrawal({ partner_id: me.id, amount: wdForm.amount, method: wdForm.method, mobile_number: me.phone, status: 'attente' }); await loadPartnerData(); setShowWithdraw(false); alert("✅ Demande envoyée à l'administrateur !"); }}>Envoyer la demande</button>
-          <p style={{ color: '#64748b', fontSize: 12, textAlign: 'center', marginTop: 10 }}>L'administrateur valide et effectue le dépôt.</p>
-        </Sheet>
+  {/* Vérification solde */}
+  <div style={{ background: me?.balance > 0 ? '#22c55e10' : '#ef444410', borderRadius: 10, padding: 12, marginBottom: 14 }}>
+    <p style={{ margin: 0, color: me?.balance > 0 ? '#22c55e' : '#ef4444', fontSize: 13, fontWeight: 'bold' }}>
+      Solde disponible : {money(me?.balance || 0)}
+    </p>
+  </div>
+
+  <label style={S.label(lt)}>Montant à retirer (F)</label>
+  <input style={S.input(lt)} type="number" value={wdForm.amount}
+    onChange={e => setWdForm(x => ({ ...x, amount: Number(e.target.value) }))} />
+
+  <label style={S.label(lt)}>Opérateur Mobile Money</label>
+  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+    {['MTN', 'Moov', 'Celtis'].map(m => (
+      <button key={m} style={{ flex: 1, padding: 10, borderRadius: 8, border: 'none', cursor: 'pointer', background: wdForm.method === m ? '#f59e0b20' : lt ? '#e8edf2' : '#0f172a', color: wdForm.method === m ? '#f59e0b' : '#94a3b8', fontWeight: 'bold', fontSize: 12 }}
+        onClick={() => setWdForm(x => ({ ...x, method: m }))}>
+        {m}
+      </button>
+    ))}
+  </div>
+
+  <label style={S.label(lt)}>Numéro de téléphone pour le dépôt</label>
+  <input style={S.input(lt)} type="tel" placeholder="Ex: 97 00 00 00"
+    value={wdForm.phone || ''}
+    onChange={e => setWdForm(x => ({ ...x, phone: e.target.value }))} />
+
+  <label style={S.label(lt)}>Nom du bénéficiaire</label>
+  <input style={S.input(lt)} placeholder="Nom complet"
+    value={wdForm.beneficiary || ''}
+    onChange={e => setWdForm(x => ({ ...x, beneficiary: e.target.value }))} />
+
+  <button style={S.btnFull()} onClick={async () => {
+    if (!me?.balance || me.balance <= 0) {
+      alert('❌ Solde insuffisant — vous ne pouvez pas faire de retrait.');
+      return;
+    }
+    if (wdForm.amount > me.balance) {
+      alert(`❌ Montant demandé (${money(wdForm.amount)}) supérieur au solde disponible (${money(me.balance)})`);
+      return;
+    }
+    if (!wdForm.phone) {
+      alert('❌ Veuillez entrer le numéro de téléphone pour le dépôt.');
+      return;
+    }
+    await api.addWithdrawal({
+      partner_id: me.id,
+      amount: wdForm.amount,
+      method: wdForm.method,
+      mobile_number: wdForm.phone,
+      beneficiary_name: wdForm.beneficiary || me.full_name,
+      status: 'attente'
+    });
+    await loadPartnerData();
+    setShowWithdraw(false);
+    alert('✅ Demande envoyée à l\'administrateur !');
+  }}>
+    Envoyer la demande
+  </button>
+  <p style={{ color: '#64748b', fontSize: 12, textAlign: 'center', marginTop: 10 }}>
+    L'administrateur valide et effectue le dépôt sur votre numéro.
+  </p>
+</Sheet>
       )}
     </div>
   );
@@ -873,7 +937,7 @@ export default function App() {
           </div>
           <div style={{ padding: '0 12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0' }}>
-              <Av name={selPartner.full_name} size={80} />
+              <Av name={selPartner.full_name} size={80} photoUrl={selPartner.photo_url} />
               <h3 style={{ margin: '10px 0 4px', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 18 }}>{selPartner.full_name}</h3>
               <p style={{ margin: 0, color: '#3b82f6', fontSize: 12, fontFamily: 'monospace' }}>{selPartner.code}</p>
               {selPartner.is_blocked && <span style={{ ...S.badge('#ef4444'), marginTop: 8 }}>🔒 Bloqué</span>}
@@ -959,7 +1023,7 @@ export default function App() {
             <div key={p.id} style={{ ...S.card(lt), margin: '0 0 8px', cursor: 'pointer' }} onClick={() => setSelPartner(p)}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Av name={p.full_name} size={40} />
+                  <Av name={p.full_name} size={40} photoUrl={p.photo_url} />
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <p style={{ margin: 0, fontWeight: 'bold', fontSize: 14, color: lt ? '#0d1b2a' : '#e2e8f0' }}>{p.full_name}</p>
@@ -1030,7 +1094,7 @@ export default function App() {
           {partners.length === 0 && <p style={{ color: '#475569', fontSize: 13 }}>Aucun partenaire encore.</p>}
           {partners.map(p => (
             <div key={p.id} style={{ ...S.card(lt), margin: '0 0 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }} onClick={() => setShowMsg(p)}>
-              <Av name={p.full_name} size={40} />
+              <Av name={p.full_name} size={40} photoUrl={p.photo_url} />
               <div><p style={{ margin: 0, fontWeight: 'bold', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 14 }}>{p.full_name}</p><p style={{ margin: 0, color: '#64748b', fontSize: 12 }}>Appuyer pour écrire</p></div>
             </div>
           ))}
