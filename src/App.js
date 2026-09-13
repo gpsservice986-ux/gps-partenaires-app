@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as api from './api';
+import bcrypt from 'bcryptjs';
 
 function wdays(start, n) {
   let d = new Date(start), c = 0;
@@ -699,7 +700,7 @@ export default function App() {
       setRole('admin'); setView('admin');
     } else {
       const partner = await api.loginPartner(username);
-      if (partner) { setMe(partner); setRole('partner'); setView('partner'); }
+      if (partner && partner.password_hash && (bcrypt.compareSync(password, partner.password_hash) || partner.password_hash === password)) { setMe(partner); setRole('partner'); setView('partner'); }
       else setLoginError('Identifiant ou mot de passe incorrect');
     }
     setLoading(false);
@@ -928,7 +929,7 @@ export default function App() {
   // ADMIN
   if (view === 'admin') return (
     <div style={{ ...app, paddingBottom: 70 }}>
-      {selClient && <ClientDetail client={selClient} viewer="admin" lt={lt} partners={partners} onBack={() => setSelClient(null)} onMarkBought={(id, updated) => { setClients(cs => cs.map(c => c.id === id ? updated : c)); setPartners(ps => ps.map(p => p.id === updated.partner_id ? { ...p, balance: (p.balance || 0) + 5000 } : p)); }} onUpdateClient={(id, updated) => setClients(cs => cs.map(c => c.id === id ? updated : c))} />}
+      {selClient && <ClientDetail client={selClient} viewer="admin" lt={lt} partners={partners} onBack={() => setSelClient(null)} onMarkBought={(id, updated) => { setClients(cs => cs.map(c => c.id === id ? updated : c)); setPartners(ps => ps.map(p => p.id === updated.partner_id ? { ...p, balance: (p.balance || 0) + (updated.gps_price * 0.1) } : p)); }} onUpdateClient={(id, updated) => setClients(cs => cs.map(c => c.id === id ? updated : c))} />}
       {selPartner && (
         <div style={S.page(lt)}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 14px 12px' }}>
@@ -969,7 +970,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {showAddPartner && <AddPartnerForm lt={lt} onClose={() => setShowAddPartner(false)} onSave={async f => { await api.addPartner({ full_name: f.full_name, phone: f.phone, address: f.address, workplace: f.workplace, job: f.job, username: f.username, password_hash: f.password, id_type: f.id_type, id_number: f.id_number, balance: 0, is_blocked: false, code: '' }); await loadAll(); }} />}
+      {showAddPartner && <AddPartnerForm lt={lt} onClose={() => setShowAddPartner(false)} onSave={async f => { await api.addPartner({ code: 'P' + Math.floor(10000 + Math.random() * 90000), full_name: f.full_name, phone: f.phone, address: f.address, workplace: f.workplace, job: f.job, username: f.username, password_hash: bcrypt.hashSync(f.password, 10), id_type: f.id_type, id_number: f.id_number, balance: 0, is_blocked: false, photo_url: f.photo_url, id_photo_url: f.id_photo_url }); await loadAll(); }} />}
       {showMsg && <MsgView partnerId={showMsg.id} partnerName={showMsg.full_name} lt={lt} isAdmin={true} onBack={() => setShowMsg(null)} />}
 
       <div style={S.header(lt)}>
