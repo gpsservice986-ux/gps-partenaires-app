@@ -9,6 +9,19 @@ function wdays(start, n) {
 }
 function fr(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }); }
 function money(n) { return `${Number(n || 0).toLocaleString('fr-FR')} F`; }
+function topPartner(clients, periodFn) {
+  const counts = {};
+  clients.forEach(c => {
+    if (c.status !== 'achete' || !c.purchase_date) return;
+    if (!periodFn(new Date(c.purchase_date))) return;
+    counts[c.partner_id] = (counts[c.partner_id] || 0) + 1;
+  });
+  let bestId = null, bestCount = 0;
+  Object.entries(counts).forEach(([pid, cnt]) => {
+    if (cnt > bestCount) { bestId = pid; bestCount = cnt; }
+  });
+  return bestCount > 0 ? { partnerId: bestId, count: bestCount } : null;
+}
 function tPaid(c) { return (Number(c.advance_paid) || 0) + (c._payments || []).reduce((s, p) => s + Number(p.amount), 0); }
 function remBal(c) { return Math.max(0, Number(c.gps_price || 0) - tPaid(c)); }
 
@@ -717,6 +730,7 @@ export default function App() {
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showMsg, setShowMsg] = useState(null);
   const [showMyProfile, setShowMyProfile] = useState(false);
+  const [showBadgeDetail, setShowBadgeDetail] = useState(false);
   const [cFilter, setCFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [searchResult, setSearchResult] = useState(null);
@@ -768,6 +782,9 @@ export default function App() {
 
   const myClients = clients.filter(c => c.partner_id === me?.id);
   const visClients = (role === 'admin' ? clients : myClients).filter(c => cFilter === 'all' || c.status === cFilter);
+  const _now = new Date();
+  const bestOfMonth = topPartner(clients, d => d.getFullYear() === _now.getFullYear() && d.getMonth() === _now.getMonth());
+  const bestOfQuarter = topPartner(clients, d => d.getFullYear() === _now.getFullYear() && Math.floor(d.getMonth() / 3) === Math.floor(_now.getMonth() / 3));
 
   if (publicRefPartner === undefined) return null;
   if (publicRefPartner) return <PublicAddClient partner={publicRefPartner} lt={lt} />;
@@ -841,7 +858,14 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setShowMyProfile(true)}>
           <Av name={me?.full_name || ''} size={38} photoUrl={me?.photo_url} />
           <div>
-            <p style={{ margin: 0, fontWeight: 'bold', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 15 }}>Bienvenue {me?.full_name?.split(' ')[0]}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <p style={{ margin: 0, fontWeight: 'bold', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 15 }}>Bienvenue {me?.full_name?.split(' ')[0]}</p>
+              {(bestOfMonth?.partnerId === me?.id || bestOfQuarter?.partnerId === me?.id) && (
+                <button onClick={e => { e.stopPropagation(); setShowBadgeDetail(x => !x); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 0 }} title="Voir le classement">
+                  {bestOfQuarter?.partnerId === me?.id ? '🥇' : '🏆'}
+                </button>
+              )}
+            </div>
             <p style={{ margin: 0, color: '#3b82f6', fontSize: 11, fontFamily: 'monospace' }}>{me?.code}</p>
           </div>
         </div>
@@ -853,6 +877,20 @@ export default function App() {
 
       {partnerTab === 'home' && (
         <div style={{ padding: '12px 12px' }}>
+          {bestOfMonth && me?.id === bestOfMonth.partnerId && (
+            <div style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)', borderRadius: 14, padding: 16, marginBottom: 12, textAlign: 'center' }}>
+              {showBadgeDetail && <div style={{ fontSize: 32 }}>🏆</div>}
+              <p style={{ margin: showBadgeDetail ? '4px 0 0' : 0, color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Meilleur partenaire du mois !</p>
+              {showBadgeDetail && <p style={{ margin: '2px 0 0', color: '#fffde7', fontSize: 12 }}>{bestOfMonth.count} ventes validées ce mois-ci — Bravo 👏</p>}
+            </div>
+          )}
+          {bestOfQuarter && me?.id === bestOfQuarter.partnerId && (
+            <div style={{ background: 'linear-gradient(135deg,#8b5cf6,#6366f1)', borderRadius: 14, padding: 16, marginBottom: 12, textAlign: 'center' }}>
+              {showBadgeDetail && <div style={{ fontSize: 32 }}>🥇</div>}
+              <p style={{ margin: showBadgeDetail ? '4px 0 0' : 0, color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Meilleur partenaire du trimestre !</p>
+              {showBadgeDetail && <p style={{ margin: '2px 0 0', color: '#ede9fe', fontSize: 12 }}>{bestOfQuarter.count} ventes validées ce trimestre — Continue comme ça 🚀</p>}
+            </div>
+          )}
           <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#1e293b)', borderRadius: 14, padding: 18, marginBottom: 12, border: '1px solid #334155' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
