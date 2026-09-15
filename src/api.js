@@ -121,13 +121,15 @@ export async function validatePurchase(clientId, gpsData, partnerId) {
     .eq('id', clientId);
   if (error) throw error;
 
-  // Crédite la commission au partenaire (5000 F par défaut)
-  await supabase.rpc('credit_commission', {
+  // Crédite la commission au partenaire (10% du prix de vente du GPS)
+  const commission = Math.round(Number(gpsData.gpsPrice || 0) * 0.1);
+  const { error: commErr } = await supabase.rpc('credit_commission', {
     p_partner_id: partnerId,
     p_client_id: clientId,
-    p_amount: 5000,
+    p_amount: commission,
     p_reason: 'Vente GPS'
   });
+  if (commErr) throw new Error('Commission non créditée : ' + commErr.message);
 }
 
 export async function searchClient(term) {
@@ -272,16 +274,28 @@ export async function getMessages(partnerId) {
   return data || [];
 }
 
-export async function sendMessage(partnerId, sender, content) {
+export async function sendMessage(partnerId, sender, content, replyTo = null) {
   const { error } = await supabase
     .from('messages')
-    .insert([{ partner_id: partnerId, sender, content }]);
+    .insert([{ partner_id: partnerId, sender, content, reply_to: replyTo }]);
   if (error) throw error;
+
+  // Réponse automatique de bienvenue quand le partenaire écrit
+  if (sender === 'partner') {
+    await supabase
+      .from('messages')
+      .insert([{
+        partner_id: partnerId,
+        sender: 'ia',
+        content: "Merci pour votre message ! 😊 Nous l'avons bien reçu, un membre de notre équipe va vous répondre très bientôt. Merci de votre patience 🙏"
+      }]);
+  }
 }
 
-export async function subscribeToMessages(partnerId, callback) {
+export function subscribeToMessages(partnerId, callback) {
+  const channelName = `messages_${partnerId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   return supabase
-    .channel(`messages_${partnerId}`)
+    .channel(channelName)
     .on('postgres_changes', {
       event: 'INSERT',
       schema: 'public',
@@ -289,6 +303,10 @@ export async function subscribeToMessages(partnerId, callback) {
       filter: `partner_id=eq.${partnerId}`
     }, callback)
     .subscribe();
+}
+
+export function unsubscribeFromMessages(channel) {
+  if (channel) supabase.removeChannel(channel);
 }
 
 // ── COMMISSIONS ──────────────────────────────────────────────

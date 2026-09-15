@@ -29,7 +29,7 @@ const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', zIndex: 50 },
   sheet: (lt) => ({ background: lt ? '#ffffff' : '#1e293b', width: '100%', maxWidth: 420, margin: '0 auto', borderRadius: '20px 20px 0 0', padding: 20, maxHeight: '88vh', overflowY: 'auto' }),
   secTitle: (lt) => ({ color: '#3b82f6', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 0 }),
-  page: (lt) => ({ position: 'fixed', inset: 0, background: lt ? '#f0f4f8' : '#0f172a', zIndex: 30, maxWidth: 420, margin: '0 auto', overflowY: 'auto', paddingBottom: 30 }),
+  page: (lt) => ({ position: 'fixed', inset: 0, background: lt ? '#f0f4f8' : '#0f172a', zIndex: 40, maxWidth: 420, margin: '0 auto', overflowY: 'auto', paddingBottom: 30 }),
 };
 
 function Av({ name, size = 38, impaye, photoUrl, zoomable = false }) {
@@ -630,22 +630,24 @@ function MsgView({ partnerId, partnerName, lt, isAdmin, onBack }) {
   const [msgs, setMsgs] = useState([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
   useEffect(() => {
     api.getMessages(partnerId).then(setMsgs);
     const sub = api.subscribeToMessages(partnerId, payload => setMsgs(prev => [...prev, payload.new]));
-    return () => { if (sub?.unsubscribe) sub.unsubscribe(); };
+    return () => { api.unsubscribeFromMessages(sub); };
   }, [partnerId]);
   async function send() {
     if (!text.trim()) return;
     setLoading(true);
-    await api.sendMessage(partnerId, isAdmin ? 'admin' : 'partner', text.trim());
+    await api.sendMessage(partnerId, isAdmin ? 'admin' : 'partner', text.trim(), replyingTo?.id || null);
     setText('');
+    setReplyingTo(null);
     const data = await api.getMessages(partnerId);
     setMsgs(data);
     setLoading(false);
   }
   return (
-    <div style={{ position: 'fixed', inset: 0, background: lt ? '#f0f4f8' : '#0f172a', zIndex: 30, maxWidth: 420, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, background: lt ? '#f0f4f8' : '#0f172a', zIndex: 40, maxWidth: 420, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 14px 12px', background: lt ? '#fff' : '#1e293b', borderBottom: `1px solid ${lt ? '#e2e8f0' : '#334155'}` }}>
         <button style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }} onClick={onBack}>←</button>
         <h2 style={{ margin: 0, fontSize: 17, color: lt ? '#0d1b2a' : '#e2e8f0' }}>{isAdmin ? partnerName : 'Service GPS'}</h2>
@@ -655,17 +657,34 @@ function MsgView({ partnerId, partnerName, lt, isAdmin, onBack }) {
         {msgs.map((m, i) => {
           const isMe = isAdmin ? m.sender === 'admin' : m.sender === 'partner';
           const isIA = m.sender === 'ia';
+          const quoted = m.reply_to ? msgs.find(x => x.id === m.reply_to) : null;
           return (
-            <div key={i} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+            <div key={i} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 4 }}>
+              {!isMe && <button onClick={() => setReplyingTo(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, padding: 4 }} title="Répondre">↩️</button>}
               <div style={{ maxWidth: '75%', background: isMe ? '#3b82f6' : isIA ? '#8b5cf620' : (lt ? '#fff' : '#1e293b'), borderRadius: 16, padding: '10px 14px', border: isIA ? '1px solid #8b5cf640' : 'none' }}>
                 {isIA && <p style={{ margin: '0 0 4px', color: '#8b5cf6', fontSize: 10, textTransform: 'uppercase' }}>IA · automatique</p>}
+                {quoted && (
+                  <div style={{ background: isMe ? 'rgba(255,255,255,0.15)' : 'rgba(148,163,184,0.15)', borderLeft: '3px solid #94a3b8', borderRadius: 6, padding: '4px 8px', marginBottom: 6 }}>
+                    <p style={{ margin: 0, color: isMe ? '#ffffffcc' : '#94a3b8', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{quoted.content}</p>
+                  </div>
+                )}
                 <p style={{ margin: 0, color: isMe ? '#fff' : isIA ? '#8b5cf6' : (lt ? '#0d1b2a' : '#e2e8f0'), fontSize: 14 }}>{m.content}</p>
                 <p style={{ margin: '4px 0 0', color: isMe ? '#ffffffaa' : '#64748b', fontSize: 10 }}>{new Date(m.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
               </div>
+              {isMe && <button onClick={() => setReplyingTo(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, padding: 4 }} title="Répondre">↩️</button>}
             </div>
           );
         })}
       </div>
+      {replyingTo && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: lt ? '#e8edf2' : '#0f172a', borderTop: `1px solid ${lt ? '#e2e8f0' : '#334155'}` }}>
+          <div style={{ borderLeft: '3px solid #3b82f6', paddingLeft: 8, overflow: 'hidden' }}>
+            <p style={{ margin: 0, color: '#3b82f6', fontSize: 11, fontWeight: 'bold' }}>Réponse à :</p>
+            <p style={{ margin: 0, color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{replyingTo.content}</p>
+          </div>
+          <button onClick={() => setReplyingTo(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, cursor: 'pointer', padding: 4 }}>✕</button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, padding: '12px 14px', background: lt ? '#fff' : '#1e293b', borderTop: `1px solid ${lt ? '#e2e8f0' : '#334155'}` }}>
         <input style={{ ...S.input(lt), marginBottom: 0, flex: 1, borderRadius: 24 }} placeholder="Écrire un message..." value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} />
         <button style={{ ...S.btn(), borderRadius: '50%', width: 44, height: 44, padding: 0, flexShrink: 0 }} onClick={send} disabled={loading}>➤</button>
@@ -780,7 +799,6 @@ export default function App() {
           </button>
         </div>
         <button style={S.btnFull()} onClick={handleLogin} disabled={loading}>{loading ? 'Connexion...' : 'Se connecter'}</button>
-        <p style={{ color: '#475569', fontSize: 12, textAlign: 'center', marginTop: 16 }}>Admin : admin / admin123</p>
       </div>
     </div>
   );
