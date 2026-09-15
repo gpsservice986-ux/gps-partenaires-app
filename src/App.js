@@ -32,14 +32,15 @@ const S = {
   page: (lt) => ({ position: 'fixed', inset: 0, background: lt ? '#f0f4f8' : '#0f172a', zIndex: 30, maxWidth: 420, margin: '0 auto', overflowY: 'auto', paddingBottom: 30 }),
 };
 
-function Av({ name, size = 38, impaye, photoUrl }) {
+function Av({ name, size = 38, impaye, photoUrl, zoomable = false }) {
   const i = (name || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
   const colors = ['#3b82f6','#6366f1','#0ea5e9','#06b6d4','#8b5cf6'];
   const bg = colors[(name || '').length % colors.length];
   const [zoomed, setZoomed] = useState(false);
+  const canZoom = zoomable && !!photoUrl;
   return (
     <>
-      <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: photoUrl ? 'pointer' : 'default' }} onClick={() => photoUrl && setZoomed(true)}>
+      <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: canZoom ? 'pointer' : 'default' }} onClick={e => { if (canZoom) { e.stopPropagation(); setZoomed(true); } }}>
         {photoUrl ? (
           <img src={photoUrl} alt={name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} />
         ) : (
@@ -50,7 +51,7 @@ function Av({ name, size = 38, impaye, photoUrl }) {
       {zoomed && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }} onClick={() => setZoomed(false)}>
           <img src={photoUrl} alt={name} style={{ maxWidth: '92%', maxHeight: '92%', borderRadius: 12, objectFit: 'contain' }} />
-          <p style={{ position: 'absolute', bottom: 30, color: '#fff', fontSize: 13, opacity: 0.7 }}>Appuyer pour fermer</p>
+          <button onClick={e => { e.stopPropagation(); setZoomed(false); }} style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: 36, height: 36, color: '#fff', fontSize: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
       )}
     </>
@@ -326,6 +327,29 @@ function AddClientForm({ partnerId, lt, onClose, onSave }) {
   );
 }
 
+function PublicAddClient({ partner, lt }) {
+  const [done, setDone] = useState(false);
+  if (done) {
+    return (
+      <div style={S.app(lt)}>
+        <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: 52, marginBottom: 12 }}>✅</div>
+          <h2 style={{ color: lt ? '#0d1b2a' : '#e2e8f0' }}>Merci !</h2>
+          <p style={{ color: '#64748b' }}>Votre inscription a bien été envoyée. {partner.full_name} vous contactera bientôt.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={S.app(lt)}>
+      <div style={{ padding: '20px 14px 0', textAlign: 'center' }}>
+        <p style={{ color: '#3b82f6', fontSize: 13, margin: 0 }}>Inscription via {partner.full_name}</p>
+      </div>
+      <AddClientForm partnerId={partner.id} lt={lt} onClose={() => setDone(true)} onSave={() => setDone(true)} />
+    </div>
+  );
+}
+
 // ── GPS Validation ────────────────────────────────────────────
 function GPSVal({ client, lt, onClose, onConfirm }) {
   const [f, setF] = useState({ gpsBrand: '', gpsModel: '', gpsPrice: '', gpsImei: '', gpsSim: '', sim: false, purchaseDate: '' });
@@ -478,7 +502,7 @@ function ClientDetail({ client: init, viewer, lt, partners, onBack, onMarkBought
       </div>
       <div style={{ padding: '0 12px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0' }}>
-          <Av name={client.full_name} size={80} />
+          <Av name={client.full_name} size={80} zoomable />
           <h3 style={{ margin: '10px 0 4px', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 18 }}>{client.full_name}</h3>
           <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>{client.phone}</p>
           <div style={{ marginTop: 8 }}><SBadge status={client.status} /></div>
@@ -663,6 +687,7 @@ export default function App() {
   const [partnerTab, setPartnerTab] = useState('home');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loading, setLoading] = useState(false);
   const [hideBalance, setHideBalance] = useState(false);
@@ -672,10 +697,12 @@ export default function App() {
   const [showAddClient, setShowAddClient] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showMsg, setShowMsg] = useState(null);
+  const [showMyProfile, setShowMyProfile] = useState(false);
   const [cFilter, setCFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [searchResult, setSearchResult] = useState(null);
   const [wdForm, setWdForm] = useState({ amount: 10000, method: 'MTN' });
+  const [publicRefPartner, setPublicRefPartner] = useState(undefined); // undefined = vérification en cours, null = pas de lien, objet = partenaire trouvé
 
   const app = S.app(lt);
 
@@ -683,6 +710,12 @@ export default function App() {
     if (role === 'admin') loadAll();
     if (role === 'partner' && me) loadPartnerData();
   }, [role]);
+
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (!ref) { setPublicRefPartner(null); return; }
+    api.getPartnerByCode(ref).then(p => setPublicRefPartner(p || null)).catch(() => setPublicRefPartner(null));
+  }, []);
 
   async function loadAll() {
     const [p, c, w] = await Promise.all([api.getPartners(), api.getClients(), api.getWithdrawals()]);
@@ -706,7 +739,7 @@ export default function App() {
     setLoading(false);
   }
 
-  function logout() { setRole(null); setMe(null); setView('login'); setUsername(''); setPassword(''); setClients([]); setPartners([]); setWithdrawals([]); }
+  function logout() { setRole(null); setMe(null); setView('login'); setUsername(''); setPassword(''); setClients([]); setPartners([]); setWithdrawals([]); setShowMyProfile(false); }
 
   async function handleSearch(term) {
     setSearch(term);
@@ -716,6 +749,9 @@ export default function App() {
 
   const myClients = clients.filter(c => c.partner_id === me?.id);
   const visClients = (role === 'admin' ? clients : myClients).filter(c => cFilter === 'all' || c.status === cFilter);
+
+  if (publicRefPartner === undefined) return null;
+  if (publicRefPartner) return <PublicAddClient partner={publicRefPartner} lt={lt} />;
 
   // LOGIN
   if (view === 'login') return (
@@ -733,7 +769,16 @@ export default function App() {
         <label style={S.label(lt)}>Identifiant</label>
         <input style={S.input(lt)} placeholder="Votre identifiant" value={username} onChange={e => setUsername(e.target.value)} />
         <label style={S.label(lt)}>Mot de passe</label>
-        <input style={S.input(lt)} type="password" placeholder="Votre mot de passe" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+        <div style={{ position: 'relative' }}>
+          <input style={{ ...S.input(lt), paddingRight: 40 }} type={showPwd ? 'text' : 'password'} placeholder="Votre mot de passe" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+          <button type="button" onClick={() => setShowPwd(x => !x)} style={{ position: 'absolute', right: 10, top: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94a3b8' }}>
+            {showPwd ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            )}
+          </button>
+        </div>
         <button style={S.btnFull()} onClick={handleLogin} disabled={loading}>{loading ? 'Connexion...' : 'Se connecter'}</button>
         <p style={{ color: '#475569', fontSize: 12, textAlign: 'center', marginTop: 16 }}>Admin : admin / admin123</p>
       </div>
@@ -746,9 +791,36 @@ export default function App() {
       {selClient && <ClientDetail client={selClient} viewer="partner" lt={lt} partners={partners} onBack={() => setSelClient(null)} onMarkBought={() => {}} onUpdateClient={() => {}} />}
       {showAddClient && <AddClientForm partnerId={me?.id} lt={lt} onClose={() => setShowAddClient(false)} onSave={c => setClients(prev => [c, ...prev])} />}
       {showMsg && <MsgView partnerId={me?.id} partnerName="Service GPS" lt={lt} isAdmin={false} onBack={() => setShowMsg(null)} />}
+      {showMyProfile && (
+        <div style={S.page(lt)}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 14px 12px' }}>
+            <button style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }} onClick={() => setShowMyProfile(false)}>←</button>
+            <h2 style={{ margin: 0, fontSize: 17, color: lt ? '#0d1b2a' : '#e2e8f0' }}>Mon profil</h2>
+          </div>
+          <div style={{ padding: '0 12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0' }}>
+              <Av name={me?.full_name} size={80} photoUrl={me?.photo_url} zoomable />
+              <h3 style={{ margin: '10px 0 4px', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 18 }}>{me?.full_name}</h3>
+              <p style={{ margin: 0, color: '#3b82f6', fontSize: 12, fontFamily: 'monospace' }}>{me?.code}</p>
+            </div>
+            <ICard title="Informations" lt={lt}>
+              <IRow label="Téléphone" value={me?.phone} lt={lt} />
+              <IRow label="Domicile" value={me?.address} lt={lt} />
+              <IRow label="Lieu de travail" value={me?.workplace} lt={lt} />
+              <IRow label="Profession" value={me?.job} lt={lt} />
+              <IRow label="Partenaire depuis" value={fr(me?.joined_at)} lt={lt} />
+            </ICard>
+            <ICard title="Performance" lt={lt}>
+              <IRow label="Clients amenés" value={myClients.length} lt={lt} />
+              <IRow label="Achetés" value={myClients.filter(c => c.status === 'achete').length} lt={lt} />
+              <IRow label="Solde" value={money(me?.balance)} lt={lt} />
+            </ICard>
+          </div>
+        </div>
+      )}
 
       <div style={S.header(lt)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setShowMyProfile(true)}>
           <Av name={me?.full_name || ''} size={38} photoUrl={me?.photo_url} />
           <div>
             <p style={{ margin: 0, fontWeight: 'bold', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 15 }}>Bienvenue {me?.full_name?.split(' ')[0]}</p>
@@ -812,7 +884,14 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <button style={S.btn()} onClick={() => setShowAddClient(true)}>+ Ajouter</button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button style={S.btnGhost(lt)} onClick={() => {
+                const link = `${window.location.origin}/?ref=${me.code}`;
+                if (navigator.share) navigator.share({ title: 'GPS Partenaires', text: '📍 Protégez votre moto avec un GPS ! Inscrivez-vous via mon lien :', url: link });
+                else { navigator.clipboard.writeText(link); alert('Lien copié : ' + link); }
+              }}>🔗 Partager</button>
+              <button style={S.btn()} onClick={() => setShowAddClient(true)}>+ Ajouter</button>
+            </div>
           </div>
           {visClients.map(c => (
             <div key={c.id} style={{ ...S.card(lt), margin: '0 0 8px', cursor: 'pointer' }} onClick={() => setSelClient(c)}>
@@ -938,7 +1017,7 @@ export default function App() {
           </div>
           <div style={{ padding: '0 12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0' }}>
-              <Av name={selPartner.full_name} size={80} photoUrl={selPartner.photo_url} />
+              <Av name={selPartner.full_name} size={80} photoUrl={selPartner.photo_url} zoomable />
               <h3 style={{ margin: '10px 0 4px', color: lt ? '#0d1b2a' : '#e2e8f0', fontSize: 18 }}>{selPartner.full_name}</h3>
               <p style={{ margin: 0, color: '#3b82f6', fontSize: 12, fontFamily: 'monospace' }}>{selPartner.code}</p>
               {selPartner.is_blocked && <span style={{ ...S.badge('#ef4444'), marginTop: 8 }}>🔒 Bloqué</span>}
