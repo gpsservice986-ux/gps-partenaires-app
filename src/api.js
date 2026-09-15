@@ -55,6 +55,16 @@ export async function loginPartner(username) {
   return data;
 }
 
+export async function getPartnerByCode(code) {
+  const { data, error } = await supabase
+    .from('partners_public')
+    .select('*')
+    .eq('code', code)
+    .single();
+  if (error) return null;
+  return data;
+}
+
 // ── CLIENTS ──────────────────────────────────────────────────
 
 export async function getClients() {
